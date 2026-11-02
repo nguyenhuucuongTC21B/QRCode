@@ -1,45 +1,168 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ko" lang="ko">
+<!DOCTYPE html>
+<html lang="vi">
 <head>
-<title>Bộ tạo QRCode NHC</title>
-<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-<script type="text/javascript" src="qrcodejquery.min.js"></script>
-<script type="text/javascript" src="taoqrcode.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Công cụ tạo mã QR ngoại tuyến - Hỗ trợ chèn ảnh cá nhân</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 8px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #0056b3; }
+        #qrcode-container { margin-top: 20px; text-align: center; }
+        /* Quan trọng: Đảm bảo canvas hiển thị bình thường, không bị ẩn */
+        #qrcode-container canvas { max-width: 100%; height: auto; border: 1px solid #ddd; }
+        .note { font-size: 12px; color: #666; margin-top: 5px; }
+    </style>
 </head>
 <body>
-<h2>Bộ tạo QRCode </h2>
-<input id="text" type="text" value="Nguyễn Hữu Cường TC22B - 0905666624" style="width:80%" /><br />
-<div id="qrcode" style="width:100px; height:100px; margin-top:15px;"></div>
+    <div class="container">
+        <h2>Tạo mã QR cá nhân hóa (Ngoại tuyến)</h2>
 
-<script type="text/javascript">
-var qrcode = new QRCode(document.getElementById("qrcode"), {
-	width : 199,
-	height : 199
-});
+        <div class="form-group">
+            <label for="qrContent">Nội dung mã QR (URL hoặc văn bản):</label>
+            <input type="text" id="qrContent" value="https://github.com/nguyenhuucuongTC21B/QRCode" placeholder="Nhập nội dung cần mã hóa...">
+        </div>
 
-function makeCode () {		
-	var elText = document.getElementById("text");
-	
-	if (!elText.value) {
-		alert("Input a text");
-		elText.focus();
-		return;
-	}
-	
-	qrcode.makeCode(elText.value);
-}
+        <div class="form-group">
+            <label for="logoFile">Chọn ảnh cá nhân (tùy chọn):</label>
+            <input type="file" id="logoFile" accept="image/png, image/jpeg, image/jpg">
+            <div class="note">Khuyến nghị sử dụng ảnh PNG nền trong suốt, kích thước không nên quá lớn.</div>
+        </div>
 
-makeCode();
+        <button onclick="generateQR()">Tạo mã QR</button>
+        <button onclick="downloadQR()" id="downloadBtn" style="display:none; background: #28a745;">Tải xuống mã QR</button>
 
-$("#text").
-	on("blur", function () {
-		makeCode();
-	}).
-	on("keydown", function (e) {
-		if (e.keyCode == 13) {
-			makeCode();
-		}
-	});
-</script>
+        <div id="qrcode-container">
+            <!-- Mã QR sẽ được tạo ở đây -->
+        </div>
+    </div>
+
+    <!-- Nhúng thư viện QRCode cốt lõi -->
+    <script src="./qrcode.min.js"></script>
+    
+    <script>
+        // Biến toàn cục, lưu trữ đối tượng QRCode và canvas cuối cùng
+        let qrCodeInstance = null;
+        let finalCanvas = null;
+
+        /**
+         * Hàm chính: Tạo mã QR (có hoặc không có logo)
+         */
+        function generateQR() {
+            const content = document.getElementById('qrContent').value;
+            if (!content) {
+                alert('Vui lòng nhập nội dung mã QR');
+                return;
+            }
+
+            const container = document.getElementById('qrcode-container');
+            // Xóa nội dung cũ
+            container.innerHTML = '';
+            document.getElementById('downloadBtn').style.display = 'none';
+
+            // 1. Tạo mã QR cơ bản (sử dụng cấu hình mức sửa lỗi cao H)
+            // Lưu ý: correctLevel phải là H (30%), nếu không sau khi chèn ảnh sẽ không quét được
+            qrCodeInstance = new QRCode(container, {
+                text: content,
+                width: 400,          // Kích thước hiển thị, có thể điều chỉnh
+                height: 400,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H // Bắt buộc phải là H
+            });
+
+            // 2. Lấy canvas được tạo (thư viện QRCode vẽ bằng canvas theo mặc định)
+            // Cần đợi một chút để DOM cập nhật, sử dụng setTimeout hoặc requestAnimationFrame
+            setTimeout(() => {
+                const canvas = container.querySelector('canvas');
+                if (!canvas) {
+                    alert('Tạo mã QR thất bại, không tìm thấy canvas.');
+                    return;
+                }
+                finalCanvas = canvas;
+
+                // 3. Kiểm tra xem người dùng có chọn ảnh không
+                const logoInput = document.getElementById('logoFile');
+                if (logoInput.files && logoInput.files[0]) {
+                    // Có ảnh, thực hiện chèn
+                    const file = logoInput.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        const img = new Image();
+                        img.onload = function() {
+                            drawLogoOnCanvas(canvas, img);
+                            showDownloadBtn();
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    // Không có ảnh, hiển thị trực tiếp nút tải xuống
+                    showDownloadBtn();
+                }
+            }, 100); // Đợi 100ms để đảm bảo quá trình render canvas hoàn tất
+        }
+
+        /**
+         * Vẽ ảnh cá nhân lên canvas mã QR
+         * @param {HTMLCanvasElement} canvas - Canvas chứa mã QR
+         * @param {HTMLImageElement} logoImg - Đối tượng ảnh đã tải
+         */
+        function drawLogoOnCanvas(canvas, logoImg) {
+            const ctx = canvas.getContext('2d');
+            
+            // Tính toán kích thước ảnh: chiếm 20% chiều rộng mã QR
+            // 20% là giá trị an toàn, quá lớn sẽ ảnh hưởng đến khả năng quét
+            const logoSize = canvas.width * 0.2;
+            
+            // Tính toán tọa độ trung tâm
+            const x = (canvas.width - logoSize) / 2;
+            const y = (canvas.height - logoSize) / 2;
+
+            // Tùy chọn: Vẽ một lớp nền trắng để ảnh nổi bật hơn, đồng thời giảm nhiễu cho mã QR
+            // Nếu ảnh của bạn có nền trong suốt, lớp nền trắng này rất hữu ích
+            ctx.fillStyle = '#FFFFFF';
+            // Vẽ hình chữ nhật lớn hơn ảnh một chút làm đường viền
+            const padding = 8;
+            ctx.fillRect(x - padding, y - padding, logoSize + padding * 2, logoSize + padding * 2);
+
+            // Vẽ ảnh cá nhân
+            // Lưu ý: Nếu tỷ lệ khung hình của ảnh không phải 1:1, vẽ trực tiếp sẽ bị méo
+            // Để đơn giản, ở đây giả định ảnh của bạn gần vuông. Nếu không, cần cắt trước.
+            ctx.drawImage(logoImg, x, y, logoSize, logoSize);
+        }
+
+        /**
+         * Hiển thị nút tải xuống
+         */
+        function showDownloadBtn() {
+            document.getElementById('downloadBtn').style.display = 'inline-block';
+        }
+
+        /**
+         * Tải xuống mã QR dưới dạng ảnh PNG
+         */
+        function downloadQR() {
+            if (!finalCanvas) {
+                alert('Vui lòng tạo mã QR trước');
+                return;
+            }
+            // Chuyển đổi canvas thành URL dữ liệu
+            const dataURL = finalCanvas.toDataURL('image/png');
+            
+            // Tạo thẻ a tạm thời để kích hoạt tải xuống
+            const link = document.createElement('a');
+            link.download = 'my-qrcode.png'; // Tên tệp
+            link.href = dataURL;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
 </body>
+</html>
