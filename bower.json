@@ -1,9 +1,9 @@
 {
   "name": "qrcode.js",
   "version": "0.0.1",
-  "homepage": "https://github.com/davidshimjs/qrcodejs",
+  "homepage": "https://github.com/nguyenhuucuongTC21B/QRCode",
   "authors": [
-    "Sangmin Shim", "Sangmin Shim <ssm0123@gmail.com> (http://jaguarjs.com)"
+    "Nguyễn Hữu Cường", "Doremon <doremon.dn01@gmail.com>"
   ],
   "description": "Cross-browser QRCode generator for javascript",
   "main": "qrcode.js",
