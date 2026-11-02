@@ -13,8 +13,9 @@
         button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; }
         button:hover { background: #0056b3; }
         #qrcode-container { margin-top: 20px; text-align: center; }
-        /* Quan trọng: Đảm bảo canvas hiển thị bình thường, không bị ẩn */
-        #qrcode-container canvas { max-width: 100%; height: auto; border: 1px solid #ddd; }
+        /* Ẩn thẻ img gốc đi, chỉ hiển thị canvas mới */
+        #qrcode-container img { display: none !important; }
+        #qrcode-container canvas { max-width: 100%; height: auto; border: 1px solid #ddd; display: inline-block; }
         .note { font-size: 12px; color: #666; margin-top: 5px; }
     </style>
 </head>
@@ -42,16 +43,11 @@
     </div>
 
     <!-- Nhúng thư viện QRCode cốt lõi -->
-    <script src="qrcode.min.js"></script>
+    <script src="./qrcode.min.js"></script>
     
     <script>
-        // Biến toàn cục, lưu trữ đối tượng QRCode và canvas cuối cùng
-        let qrCodeInstance = null;
         let finalCanvas = null;
 
-        /**
-         * Hàm chính: Tạo mã QR (có hoặc không có logo)
-         */
         function generateQR() {
             const content = document.getElementById('qrContent').value;
             if (!content) {
@@ -60,104 +56,87 @@
             }
 
             const container = document.getElementById('qrcode-container');
-            // Xóa nội dung cũ
+            // Xóa nội dung cũ (cả img và canvas cũ)
             container.innerHTML = '';
             document.getElementById('downloadBtn').style.display = 'none';
+            finalCanvas = null;
 
-            // 1. Tạo mã QR cơ bản (sử dụng cấu hình mức sửa lỗi cao H)
-            // Lưu ý: correctLevel phải là H (30%), nếu không sau khi chèn ảnh sẽ không quét được
-            qrCodeInstance = new QRCode(container, {
+            // 1. Tạo mã QR cơ bản
+            new QRCode(container, {
                 text: content,
-                width: 400,          // Kích thước hiển thị, có thể điều chỉnh
+                width: 400,
                 height: 400,
                 colorDark: "#000000",
                 colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H // Bắt buộc phải là H
+                correctLevel: QRCode.CorrectLevel.H
             });
 
-            // 2. Lấy canvas được tạo (thư viện QRCode vẽ bằng canvas theo mặc định)
-            // Cần đợi một chút để DOM cập nhật, sử dụng setTimeout hoặc requestAnimationFrame
+            // 2. Đợi thư viện render xong thẻ <img>
             setTimeout(() => {
-                const canvas = container.querySelector('canvas');
-                if (!canvas) {
-                    alert('Tạo mã QR thất bại, không tìm thấy canvas.');
+                const qrImg = container.querySelector('img');
+                if (!qrImg) {
+                    alert('Tạo mã QR thất bại, không tìm thấy ảnh.');
                     return;
                 }
-                finalCanvas = canvas;
 
-                // 3. Kiểm tra xem người dùng có chọn ảnh không
-                const logoInput = document.getElementById('logoFile');
-                if (logoInput.files && logoInput.files[0]) {
-                    // Có ảnh, thực hiện chèn
-                    const file = logoInput.files[0];
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                        const img = new Image();
-                        img.onload = function() {
-                            drawLogoOnCanvas(canvas, img);
-                            showDownloadBtn();
+                // 3. Tạo một Canvas mới để chứa kết quả cuối cùng
+                finalCanvas = document.createElement('canvas');
+                finalCanvas.width = 400;
+                finalCanvas.height = 400;
+                const ctx = finalCanvas.getContext('2d');
+                container.appendChild(finalCanvas);
+
+                // 4. Đợi ảnh QR tải xong, vẽ nó lên Canvas
+                qrImg.onload = function() {
+                    ctx.drawImage(qrImg, 0, 0, 400, 400);
+
+                    // 5. Xử lý chèn ảnh cá nhân
+                    const logoInput = document.getElementById('logoFile');
+                    if (logoInput.files && logoInput.files[0]) {
+                        const file = logoInput.files[0];
+                        const reader = new FileReader();
+                        
+                        reader.onload = function(e) {
+                            const logoImg = new Image();
+                            logoImg.onload = function() {
+                                // Vẽ logo lên canvas
+                                const logoSize = 400 * 0.2; // 20% kích thước
+                                const x = (400 - logoSize) / 2;
+                                const y = (400 - logoSize) / 2;
+
+                                // Nền trắng
+                                ctx.fillStyle = '#FFFFFF';
+                                const padding = 6;
+                                ctx.fillRect(x - padding, y - padding, logoSize + padding * 2, logoSize + padding * 2);
+
+                                // Vẽ ảnh
+                                ctx.drawImage(logoImg, x, y, logoSize, logoSize);
+                                document.getElementById('downloadBtn').style.display = 'inline-block';
+                            };
+                            logoImg.src = e.target.result;
                         };
-                        img.src = e.target.result;
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    // Không có ảnh, hiển thị trực tiếp nút tải xuống
-                    showDownloadBtn();
+                        reader.readAsDataURL(file);
+                    } else {
+                        // Không có ảnh, hiện luôn nút tải
+                        document.getElementById('downloadBtn').style.display = 'inline-block';
+                    }
+                };
+                
+                // Kích hoạt sự kiện load nếu ảnh đã được cache
+                if (qrImg.complete) {
+                    qrImg.onload();
                 }
-            }, 100); // Đợi 100ms để đảm bảo quá trình render canvas hoàn tất
+            }, 150); // Đợi 150ms cho chắc chắn
         }
 
-        /**
-         * Vẽ ảnh cá nhân lên canvas mã QR
-         * @param {HTMLCanvasElement} canvas - Canvas chứa mã QR
-         * @param {HTMLImageElement} logoImg - Đối tượng ảnh đã tải
-         */
-        function drawLogoOnCanvas(canvas, logoImg) {
-            const ctx = canvas.getContext('2d');
-            
-            // Tính toán kích thước ảnh: chiếm 20% chiều rộng mã QR
-            // 20% là giá trị an toàn, quá lớn sẽ ảnh hưởng đến khả năng quét
-            const logoSize = canvas.width * 0.2;
-            
-            // Tính toán tọa độ trung tâm
-            const x = (canvas.width - logoSize) / 2;
-            const y = (canvas.height - logoSize) / 2;
-
-            // Tùy chọn: Vẽ một lớp nền trắng để ảnh nổi bật hơn, đồng thời giảm nhiễu cho mã QR
-            // Nếu ảnh của bạn có nền trong suốt, lớp nền trắng này rất hữu ích
-            ctx.fillStyle = '#FFFFFF';
-            // Vẽ hình chữ nhật lớn hơn ảnh một chút làm đường viền
-            const padding = 8;
-            ctx.fillRect(x - padding, y - padding, logoSize + padding * 2, logoSize + padding * 2);
-
-            // Vẽ ảnh cá nhân
-            // Lưu ý: Nếu tỷ lệ khung hình của ảnh không phải 1:1, vẽ trực tiếp sẽ bị méo
-            // Để đơn giản, ở đây giả định ảnh của bạn gần vuông. Nếu không, cần cắt trước.
-            ctx.drawImage(logoImg, x, y, logoSize, logoSize);
-        }
-
-        /**
-         * Hiển thị nút tải xuống
-         */
-        function showDownloadBtn() {
-            document.getElementById('downloadBtn').style.display = 'inline-block';
-        }
-
-        /**
-         * Tải xuống mã QR dưới dạng ảnh PNG
-         */
         function downloadQR() {
             if (!finalCanvas) {
                 alert('Vui lòng tạo mã QR trước');
                 return;
             }
-            // Chuyển đổi canvas thành URL dữ liệu
             const dataURL = finalCanvas.toDataURL('image/png');
-            
-            // Tạo thẻ a tạm thời để kích hoạt tải xuống
             const link = document.createElement('a');
-            link.download = 'my-qrcode.png'; // Tên tệp
+            link.download = 'my-qrcode.png';
             link.href = dataURL;
             document.body.appendChild(link);
             link.click();
